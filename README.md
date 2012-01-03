@@ -1,4 +1,4 @@
-Converted Justin Tulloss' spin.js to CoffeeScript (https://github.com/JustinTulloss/spin.js)
+Converted Felix Gnass' spin.js to CoffeeScript (Source: http://fgnass.github.com/spin.js/)
 
 ## Changes:
 * plugin now fully relies on jQuery. I removed some helper-functions like merge() and css() because jQuery already has them.
