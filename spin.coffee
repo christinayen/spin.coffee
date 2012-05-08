@@ -1,4 +1,17 @@
 # jQuery Plugin
+#
+# Example Usage
+# $('img').spin()
+#
+# Possible Options
+#   hide:     [true, false]               | Default: false      | hide the element on which .spin() was called as long as the spinner is spinning
+#   stop:     [true, false]               | Default: false      | stop the spinner
+#   offsetX:  int                         | Default: 0          | x-offset
+#   offsetY:  int                         | Default: 0          | y-offset
+#   position: ['left', 'right', 'center'] | Default: 'center'   | where to position the spinner within the element
+#   color:    [any valid css color]       | Default: font-color | spinner-color
+
+
 $.fn.spin = (opts) ->
   opts = {} if opts is undefined
   presets =
@@ -29,7 +42,7 @@ $.fn.spin = (opts) ->
 
   animations       = {}
   prefixes         = [ "webkit", "Moz", "ms", "O" ]
-  useCssAnimations = undefined
+  useCssAnimations = null
 
 
   # Utility function to create elements. If no tag name is given,
@@ -41,19 +54,21 @@ $.fn.spin = (opts) ->
     return element
 
 
-  # Inserts child1 before child2. If child2 is not specified,
-  # child1 is appended. If child2 has no parentNode, child2 is
-  # appended first.
-  insert = (parent, child1, child2) ->
-    insert parent, child2 if child2 and not child2.parentNode
-    parent.insertBefore child1, child2 or null
+  # Appends children and returns the parent.
+  insert = (parent) ->
+    i = 1
+    n = arguments.length
+
+    while i < n
+      parent.appendChild arguments[i]
+      i++
 
     return parent
 
 
 	# Creates a stylesheet in the <head> to dynamically insert the CSS3 animations
   sheet = (->
-    el = createElement("style", {type: 'text/css'})
+    el = createElement("style")
     insert document.getElementsByTagName("head")[0], el
     el.sheet or el.styleSheet
   )()
@@ -76,20 +91,27 @@ $.fn.spin = (opts) ->
     return name
 
 
+  css = (el, prop) ->
+    for n of prop
+      el.style[vendor(el, n) or n] = prop[n]
+    return el
+
+
   # Tries various vendor prefixes and returns the first supported property.
   vendor = (el, prop) ->
-    style = el.style
-
-    return prop if style[prop] isnt undefined
+    s  = el.style
+    pp = undefined
+    i  = undefined
+    return prop  if s[prop] isnt `undefined`
 
     prop = prop.charAt(0).toUpperCase() + prop.slice(1)
-
     i = 0
+
     while i < prefixes.length
-      prefixedProp = prefixes[i] + prop
-      return prefixedProp if style[prefixedProp] isnt undefined
+      pp = prefixes[i] + prop
+      return pp  if s[pp] isnt `undefined`
       i++
-    
+
 
   # Returns the absolute page-offset of the given element.
   pos = (el) ->
@@ -116,6 +138,7 @@ $.fn.spin = (opts) ->
         offsetX:     0
         offsetY:     0
         opacity:     1 / 4
+        position:    'center'
         radius:      10
         speed:       1.5
         trail:       80
@@ -133,9 +156,17 @@ $.fn.spin = (opts) ->
 
       if target
         $(target).after(el) # insert target into DOM
-        tp = pos(target) # target position
-        ep = pos(el)     # element position
-        $(el).css left: (target.offsetWidth >> 1 ) - ep.x + tp.x + @opts.offsetX + "px", top:  (target.offsetHeight >> 1) - ep.y + tp.y + @opts.offsetY + "px"
+        tp = pos(target)    # target position
+        ep = pos(el)        # element position
+
+        if @opts.position == 'center'
+          $(el).css left: (target.offsetWidth >> 1 ) - ep.x + tp.x + @opts.offsetX, top:  (target.offsetHeight >> 1) - ep.y + tp.y + @opts.offsetY
+
+        else if @opts.position == 'left'
+          $(el).css left: 0 + @opts.offsetX, top: (target.offsetHeight >> 1) - ep.y + tp.y + @opts.offsetY + 'px'
+
+        else if @opts.position == 'right'
+          $(el).css right: 0 + @opts.offsetX, top:  (target.offsetHeight >> 1) - ep.y + tp.y + @opts.offsetY
 
       el.setAttribute "aria-role", "progressbar"
       @lines el, @opts
@@ -165,32 +196,34 @@ $.fn.spin = (opts) ->
         clearTimeout @timeout
         el.parentNode.removeChild el  if el.parentNode
         @el = `undefined`
-      this
+      return this
 
     lines: (el, o) ->
       fill = (color, shadow) ->
-        $('<div>').css({
-          position:         "absolute"
-          width:            (o.length + o.width) + "px"
-          height:           o.width + "px"
-          background:       color
-          boxShadow:        shadow
-          transformOrigin:  "left"
-          transform:        "rotate(" + ~~(360 / o.lines * i) + "deg) translate(" + o.radius + "px" + ",0)"
-          borderRadius:     (o.width >> 1) + "px"
-        })[0]
+        css createElement(),
+          position: "absolute"
+          width: (o.length + o.width) + "px"
+          height: o.width + "px"
+          background: color
+          boxShadow: shadow
+          transformOrigin: "left"
+          transform: "rotate(" + ~~(360 / o.lines * i) + "deg) translate(" + o.radius + "px" + ",0)"
+          borderRadius: (o.width >> 1) + "px"
 
       i = 0
+      seg = undefined
       while i < o.lines
-        seg = $('<div>').css({
-          position:   "absolute"
-          top:        1 + ~(o.width / 2) + "px"
-          transform:  if @opts.transform3d then "translate3d(0,0,0)" else ''
-          opacity:    o.opacity
-          animation:  useCssAnimations and addAnimation(o.opacity, o.trail, i, o.lines) + " " + 1 / o.speed + "s linear infinite"
-        })[0]
-        
-        insert seg, $(fill("#000", "0 0 4px " + "#000")).css('top', 2 + 'px') if o.shadow
+        seg = css(createElement(),
+          position: "absolute"
+          top: 1 + ~(o.width / 2) + "px"
+          transform: (if o.transform3d then "translate3d(0,0,0)" else "")
+          opacity: o.opacity
+          animation: useCssAnimations and addAnimation(o.opacity, o.trail, i, o.lines) + " " + 1 / o.speed + "s linear infinite"
+        )
+        if o.shadow
+          insert seg, css(fill("#000", "0 0 4px " + "#000"),
+            top: 2 + "px"
+          )
         insert el, insert(seg, fill(o.color, "0 0 1px rgba(0,0,0,.1)"))
         i++
 
@@ -200,71 +233,77 @@ $.fn.spin = (opts) ->
     opacity: (el, i, val) ->
       el.childNodes[i].style.opacity = val  if i < el.childNodes.length
 
- 
-  # VML rendering for IE
-  # (->
-  #   s = css(createElement("group"), behavior: "url(#default#VML)")
-  #   if not vendor(s, "transform") and s.adj
-  #     i = 4
-  #     while i--
-  #       sheet.addRule [ "group", "roundrect", "fill", "stroke" ][i], "behavior:url(#default#VML)"
+  # VML Rendering for IE
+  (->
+    s = css(createElement("group"), { behavior: "url(#default#VML)" })
+    i = undefined
 
-  #     proto.lines = (el, o) ->
-  #       grp = ->
-  #         css createElement("group",
-  #           coordsize: s + " " + s
-  #           coordorigin: -r + " " + -r
-  #         ),
-  #           width: s
-  #           height: s
-  #       seg = (i, dx, filter) ->
-  #         insert g, insert(css(grp(),
-  #           rotation: 360 / o.lines * i + "deg"
-  #           left:     ~~dx
+    if not vendor(s, "transform") and s.adj
+      i = 4
+      while i--
+        sheet.addRule [ "group", "roundrect", "fill", "stroke" ][i], "behavior:url(#default#VML)"
 
-  #         ), insert(css(createEl("roundrect",
-  #           arcsize:  1
+      Spinner.prototype.lines = (el, o) ->
+        grp = ->
+          css createElement("group",
+            coordsize: s + " " + s
+            coordorigin: -r + " " + -r
+          ),
+            width: s
+            height: s
 
-  #         ),
-  #           width:  r
-  #           height: o.width
-  #           left:   o.radius
-  #           top:    -o.width >> 1
-  #           filter: filter
+        seg = (i, dx, filter) ->
+          insert g, insert(css(grp(),
+            rotation: 360 / o.lines * i + "deg"
+            left: ~~dx
+          ), insert(css(createElement("roundrect",
+            arcsize: 1
+          ),
+            width: r
+            height: o.width
+            left: o.radius
+            top: -o.width >> 1
+            filter: filter
+          ), createElement("fill",
+            color: o.color
+            opacity: o.opacity
+          ), createElement("stroke",
+            opacity: 0
+          )))
 
-  #         ), createElement("fill",
-  #           color:   o.color
-  #           opacity: o.opacity
+        r = o.length + o.width
+        s = 2 * r
+        g = grp()
+        margin = ~(o.length + o.radius + o.width) + "px"
 
-  #         ), createElement("stroke",
-  #           opacity: 0
-  #         )))
+        i = undefined
+        if o.shadow
+          i = 1
+          while i <= o.lines
+            seg i, -2, "progid:DXImageTransform.Microsoft.Blur(pixelradius=2,makeshadow=1,shadowopacity=.3)"
+            i++
+        i = 1
 
-  #       r = o.length + o.width
-  #       s = 2 * r
-  #       g = grp()
-  #       margin = ~(o.length + o.radius + o.width) + "px"
-  #       i = undefined
-  #       if o.shadow
-  #         i = 1
-  #         while i <= o.lines
-  #           seg i, -2, "progid:DXImageTransform.Microsoft.Blur(pixelradius=2,makeshadow=1,shadowopacity=.3)"
-  #           i++
+        while i <= o.lines
+          seg i
+          i++
 
-  #       seg i for i in o.lines
+        insert css(el,
+          margin: margin + " 0 0 " + margin
+          zoom: 1
+        ), g
 
-  #       insert(css(el, margin: margin + " 0 0 " + margin, zoom: 1), g)
+      Spinner.prototype.opacity = (el, i, val, o) ->
+        c = el.firstChild
+        o = o.shadow and o.lines or 0
+        if c and i + o < c.childNodes.length
+          c = c.childNodes[i + o]
+          c = c and c.firstChild
+          c = c and c.firstChild
+          c.opacity = val  if c
+    else
+      useCssAnimations = vendor(s, "animation")
+  )()
 
-  #     proto.opacity = (el, i, val, o) ->
-  #       c = el.firstChild
-  #       o = o.shadow and o.lines or 0
-  #       if c and i + o < c.childNodes.length
-  #         c = c.childNodes[i + o]
-  #         c = c and c.firstChild
-  #         c = c and c.firstChild
-  #         c.opacity = val  if c
-  #   else
-  #     useCssAnimations = vendor(s, "animation")
-  # )()
   window.Spinner = Spinner
 ) window, document
