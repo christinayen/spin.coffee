@@ -40,15 +40,15 @@ $.fn.spin = (opts) ->
 # Spinner-Script
 ((window, document, undefined_) ->
 
-  animations       = {}
-  prefixes         = [ "webkit", "Moz", "ms", "O" ]
-  useCssAnimations = null
+  animations       = {}                               # Animation rules keyed by their name
+  prefixes         = [ "webkit", "Moz", "ms", "O" ]   # Vendor prefixes
+  useCssAnimations = null                             # Whether to use CSS animations or setTimeout
 
 
   # Utility function to create elements. If no tag name is given,
   # a DIV is created. Optionally properties can be passed.
   createElement = (tag, property) ->
-    element		 = document.createElement(tag or "div")
+    element    = document.createElement(tag or "div")
     element[n] = property[n] for n of property
 
     return element
@@ -66,7 +66,7 @@ $.fn.spin = (opts) ->
     return parent
 
 
-	# Creates a stylesheet in the <head> to dynamically insert the CSS3 animations
+  # Creates a stylesheet in the <head> to dynamically insert the CSS3 animations
   sheet = (->
     el = createElement("style")
     insert document.getElementsByTagName("head")[0], el
@@ -91,6 +91,7 @@ $.fn.spin = (opts) ->
     return name
 
 
+  # Sets multiple style properties at once.
   css = (el, prop) ->
     for n of prop
       el.style[vendor(el, n) or n] = prop[n]
@@ -102,11 +103,11 @@ $.fn.spin = (opts) ->
     s  = el.style
     pp = undefined
     i  = undefined
-    return prop  if s[prop] isnt `undefined`
 
     prop = prop.charAt(0).toUpperCase() + prop.slice(1)
-    i = 0
+    return prop  if s[prop] isnt `undefined`
 
+    i = 0
     while i < prefixes.length
       pp = prefixes[i] + prop
       return pp  if s[pp] isnt `undefined`
@@ -131,19 +132,29 @@ $.fn.spin = (opts) ->
   class Spinner
     constructor: (opts) ->
       @defaults =
-        color:       "#000"
-        fps:         20
-        length:      7
-        lines:       12
+        lines:       12         # The number of lines to draw
+        length:      7          # The length of each line
+        width:       5          # The line thickness
+        radius:      10         # The radius of the inner circle
+        scale:       1.0        # Scales overall size of the spinner
+        corners:     1          # Roundness (0..1)
+        color:       "#000"     # #rgb or #rrggbb
+        opacity:     1 / 4      # Opacity of the lines
+        rotate:      0          # Rotation offset
+        direction:   1          # 1: clockwise, -1: counterclockwise
+        speed:       1          # Rounds per second
+        trail:       100        # Afterglow percentage
+        fps:         20         # Frames per second when using setTimeout()
+        zIndex:      2e9        # Use a high z-index by default
+        className:   'spinner'  # CSS class to assign to the element
+        shadow:      false      # Whether to render a shadow
+        hwaccel:     false      # Whether to use hardware acceleration (can cause a strobe-like effect in webkit due to a webkit-bug)
         offsetX:     0
         offsetY:     0
-        opacity:     1 / 4
         position:    'center'
-        radius:      10
-        speed:       1.5
-        trail:       80
-        transform3d: false # can cause a strobe-like effect in webkit due to a webkit-bug
-        width:       5
+        # top:       '50%'      # center vertically
+        # left:      '50%'      # center horizontally
+        # position:  'absolute' # Element positioning
 
       @opts = $.extend(@defaults, opts or {})
       return Spinner unless @spin
@@ -152,7 +163,13 @@ $.fn.spin = (opts) ->
     spin: (target) ->
       @stop()
       self = this
-      el = self.el = $('<div>').css('position', 'relative')[0]
+      o    = @opts
+      el = self.el = $("<div class='#{o.className}'>").css('position', 'relative')[0]
+
+      css(el, {
+        width: 0
+        zIndex: o.zIndex
+      })
 
       if target
         $(target).after(el) # insert target into DOM
@@ -168,28 +185,32 @@ $.fn.spin = (opts) ->
         else if @opts.position == 'right'
           $(el).css right: 0 + @opts.offsetX, top:  (target.offsetHeight >> 1) - ep.y + tp.y + @opts.offsetY
 
+
+
       el.setAttribute "aria-role", "progressbar"
       @lines el, @opts
 
+      # No CSS animation support, use setTimeout() instead
       unless useCssAnimations
-        o     = @opts
         i     = 0
+        start = (o.lines - 1) * (1 - o.direction) / 2
         fps   = o.fps
         f     = fps / o.speed
         ostep = (1 - o.opacity) / (f * o.trail / 100)
         astep = f / o.lines
         (anim = ->
           i++
-          s = o.lines
+          j = 0
 
-          while s
-            alpha = Math.max(1 - (i + s * astep) % f * ostep, o.opacity)
-            self.opacity el, o.lines - s, alpha, o
-            s--
+          while j < o.lines
+            alpha = Math.max(1 - (i + (o.lines - j) * astep) % f * ostep, o.opacity)
+            self.opacity el, j * o.direction + start, alpha, o
+            j++
           self.timeout = self.el and setTimeout(anim, ~~(1000 / fps))
         )()
       self
 
+    # Stops and removes the Spinner.
     stop: ->
       el = @el
       if el
@@ -198,27 +219,30 @@ $.fn.spin = (opts) ->
         @el = `undefined`
       return this
 
+    # Internal method that draws the individual lines. Will be overwritten
+    # in VML fallback mode below.
     lines: (el, o) ->
       fill = (color, shadow) ->
         css createElement(),
           position: "absolute"
-          width: (o.length + o.width) + "px"
-          height: o.width + "px"
+          width: o.scale * (o.length + o.width) + "px"
+          height: o.scale * o.width + "px"
           background: color
           boxShadow: shadow
           transformOrigin: "left"
-          transform: "rotate(" + ~~(360 / o.lines * i) + "deg) translate(" + o.radius + "px" + ",0)"
-          borderRadius: (o.width >> 1) + "px"
+          transform: "rotate(" + ~~(360 / o.lines * i + o.rotate) + "deg) translate(" + o.scale*o.radius + "px" + ",0)"
+          borderRadius: (o.corners * o.scale * o.width >> 1) + "px"
 
       i = 0
+      start = (o.lines - 1) * (1 - o.direction) / 2
       seg = undefined
       while i < o.lines
         seg = css(createElement(),
           position: "absolute"
-          top: 1 + ~(o.width / 2) + "px"
-          transform: (if o.transform3d then "translate3d(0,0,0)" else "")
+          top: 1 + ~(o.scale * o.width / 2) + "px"
+          transform: (if o.hwaccel then "translate3d(0,0,0)" else "")
           opacity: o.opacity
-          animation: useCssAnimations and addAnimation(o.opacity, o.trail, i, o.lines) + " " + 1 / o.speed + "s linear infinite"
+          animation: useCssAnimations and addAnimation(o.opacity, o.trail, start + i * o.direction, o.lines) + " " + 1 / o.speed + "s linear infinite"
         )
         if o.shadow
           insert seg, css(fill("#000", "0 0 4px " + "#000"),
@@ -230,8 +254,11 @@ $.fn.spin = (opts) ->
       return el
 
 
+    # Internal method that adjusts the opacity of a single line.
+    # Will be overwritten in VML fallback mode below.
     opacity: (el, i, val) ->
       el.childNodes[i].style.opacity = val  if i < el.childNodes.length
+
 
   # VML Rendering for IE
   (->
